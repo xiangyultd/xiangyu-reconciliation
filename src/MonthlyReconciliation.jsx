@@ -145,13 +145,17 @@ export default function MonthlyReconciliation() {
   const rows = useMemo(() => shipped.map(p => {
     const wage = findScheduleWage(p);
     const revenue = p.shippedTotal || p.totalAmount || 0;
+    const tax = Math.round(revenue - revenue / 1.05);
+    const revenueExTax = Math.round(revenue / 1.05);
     const cost = Number(costs[p.id] || 0);
-    const gross = revenue - cost - wage;
-    return { p, wage, revenue, cost, gross };
+    const gross = revenueExTax - cost - wage;
+    return { p, wage, revenue, tax, revenueExTax, cost, gross };
   }), [shipped, scheduleOrders, costs]);
 
   // 合計
   const totalRevenue = rows.reduce((s, r) => s + r.revenue, 0);
+  const totalTax = rows.reduce((s, r) => s + r.tax, 0);
+  const totalRevenueExTax = rows.reduce((s, r) => s + r.revenueExTax, 0);
   const totalCost = rows.reduce((s, r) => s + r.cost, 0);
   const totalWage = rows.reduce((s, r) => s + r.wage, 0);
   const totalGross = rows.reduce((s, r) => s + r.gross, 0);
@@ -178,7 +182,7 @@ export default function MonthlyReconciliation() {
   }
 
   function handleCopyCSV() {
-    const header = "客單名稱\t客戶\t師傅\t出貨日\t發票號碼\t售價\t廠商成本\t師傅工資\t毛利\t備註";
+    const header = "客單名稱\t客戶\t師傅\t出貨日\t發票號碼\t含稅售價\t稅額\t未稅售價\t廠商成本\t師傅工資\t毛利\t備註";
     const lines = rows.map(r => [
       findClientName(r.p),
       r.p.cust || r.p.customer || "",
@@ -186,6 +190,8 @@ export default function MonthlyReconciliation() {
       r.p.shippedAt || "",
       r.p.invoiceNo || "",
       r.revenue,
+      r.tax,
+      r.revenueExTax,
       r.cost,
       r.wage,
       r.gross,
@@ -199,7 +205,7 @@ export default function MonthlyReconciliation() {
   const profitBg = n => n >= 0 ? "#052e16" : "#2d0a0a";
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0b1220", color: "#e2e8f0", fontFamily: ff, padding: 0 }}>
+    <div style={{ minHeight: "100vh", background: "#f1f5f9", color: "#1e293b", fontFamily: ff, padding: 0 }}>
       {/* Header */}
       <div style={{ background: "linear-gradient(135deg,#0f1e3a,#0b1220)", borderBottom: "1px solid #1e3a5f", padding: "20px 24px 0" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
@@ -239,9 +245,9 @@ export default function MonthlyReconciliation() {
                 { label: "師傅工資", val: totalWage, color: "#8b5cf6", icon: "👷" },
                 { label: "毛利", val: totalGross, color: profitColor(totalGross), icon: totalGross >= 0 ? "📈" : "📉" },
               ].map(({ label, val, color, icon }) => (
-                <div key={label} style={{ background: "#0f1e3a", border: "1px solid #1e3a5f", borderRadius: 12, padding: "14px 16px" }}>
+                <div key={label} style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: "14px 16px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
                   <div style={{ fontSize: 18, marginBottom: 4 }}>{icon}</div>
-                  <div style={{ fontSize: 11, color: "#64748b", marginBottom: 2 }}>{label}</div>
+                  <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 2 }}>{label}</div>
                   <div style={{ fontSize: 20, fontWeight: 700, color }}>{fmt(val)}</div>
                 </div>
               ))}
@@ -249,11 +255,11 @@ export default function MonthlyReconciliation() {
 
             {/* 各師傅工資 */}
             {Object.keys(wageByMaster).length > 0 && (
-              <div style={{ background: "#0f1e3a", border: "1px solid #1e3a5f", borderRadius: 12, padding: 16, marginBottom: 20 }}>
-                <div style={{ fontSize: 12, color: "#94a3b8", fontWeight: 600, marginBottom: 12, letterSpacing: "0.08em" }}>各師傅工資</div>
+              <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: 16, marginBottom: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+                <div style={{ fontSize: 12, color: "#64748b", fontWeight: 600, marginBottom: 12, letterSpacing: "0.08em" }}>各師傅工資</div>
                 {Object.entries(wageByMaster).map(([name, wage]) => (
-                  <div key={name} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid #1a2f4a", fontSize: 13 }}>
-                    <span style={{ color: "#94a3b8" }}>{name}</span>
+                  <div key={name} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid #f1f5f9", fontSize: 13 }}>
+                    <span style={{ color: "#64748b" }}>{name}</span>
                     <span style={{ fontWeight: 600 }}>{fmt(wage)}</span>
                   </div>
                 ))}
@@ -268,35 +274,45 @@ export default function MonthlyReconciliation() {
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {rows.map(({ p, wage, revenue, cost, gross }) => (
-                  <div key={p.id} style={{ background: "#0f1e3a", border: "1px solid #1e3a5f", borderRadius: 12, overflow: "hidden" }}>
+                {rows.map(({ p, wage, revenue, tax, revenueExTax, cost, gross }) => (
+                  <div key={p.id} style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
                     {/* 上半：基本資訊 */}
-                    <div style={{ padding: "12px 16px", borderBottom: "1px solid #1a2f4a" }}>
+                    <div style={{ padding: "12px 16px", borderBottom: "1px solid #f1f5f9" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
                         <div>
-                          <span style={{ fontWeight: 700, fontSize: 14, marginRight: 10 }}>{findClientName(p)}</span>
-                          <span style={{ fontSize: 11, color: "#64748b", background: "#1e3a5f", padding: "2px 6px", borderRadius: 4, marginRight: 6 }}>{p.cust || p.customer || ""}</span>
-                          {findMasterName(p) && <span style={{ fontSize: 11, color: "#8b5cf6", background: "#2d1b5e", padding: "2px 6px", borderRadius: 4 }}>{findMasterName(p)}</span>}
+                          <span style={{ fontWeight: 700, fontSize: 14, marginRight: 10, color: "#1e293b" }}>{findClientName(p)}</span>
+                          <span style={{ fontSize: 11, color: "#64748b", background: "#f1f5f9", padding: "2px 6px", borderRadius: 4, marginRight: 6 }}>{p.cust || p.customer || ""}</span>
+                          {findMasterName(p) && <span style={{ fontSize: 11, color: "#7c3aed", background: "#f3e8ff", padding: "2px 6px", borderRadius: 4 }}>{findMasterName(p)}</span>}
                         </div>
                         <div style={{ textAlign: "right" }}>
-                          <div style={{ fontSize: 11, color: "#64748b" }}>{p.shippedAt || ""}</div>
-                          {p.invoiceNo && <div style={{ fontSize: 11, color: "#475569" }}>{p.invoiceNo}</div>}
+                          <div style={{ fontSize: 11, color: "#94a3b8" }}>{p.shippedAt || ""}</div>
+                          {p.invoiceNo && <div style={{ fontSize: 11, color: "#64748b" }}>{p.invoiceNo}</div>}
                         </div>
                       </div>
-                      {p.product && <div style={{ fontSize: 11, color: "#64748b" }}>📦 {p.product}</div>}
+                      {p.product && <div style={{ fontSize: 11, color: "#94a3b8" }}>📦 {p.product}</div>}
                     </div>
 
                     {/* 下半：金額區 */}
                     <div style={{ padding: "12px 16px" }}>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
-                        {/* 售價 */}
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
+                        {/* 含稅售價 */}
                         <div>
-                          <div style={{ fontSize: 10, color: "#64748b", marginBottom: 3 }}>售價</div>
-                          <div style={{ fontSize: 15, fontWeight: 600, color: "#3b82f6" }}>{fmt(revenue)}</div>
+                          <div style={{ fontSize: 10, color: "#94a3b8", marginBottom: 3 }}>含稅售價</div>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: "#3b82f6" }}>{fmt(revenue)}</div>
+                        </div>
+                        {/* 稅額 */}
+                        <div>
+                          <div style={{ fontSize: 10, color: "#94a3b8", marginBottom: 3 }}>稅額(5%)</div>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: "#f59e0b" }}>{fmt(tax)}</div>
+                        </div>
+                        {/* 未稅售價 */}
+                        <div>
+                          <div style={{ fontSize: 10, color: "#94a3b8", marginBottom: 3 }}>未稅售價</div>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: "#0ea5e9" }}>{fmt(revenueExTax)}</div>
                         </div>
                         {/* 廠商成本 - 手填 */}
                         <div>
-                          <div style={{ fontSize: 10, color: "#64748b", marginBottom: 3 }}>廠商成本</div>
+                          <div style={{ fontSize: 10, color: "#94a3b8", marginBottom: 3 }}>廠商成本</div>
                           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                             <span style={{ fontSize: 12, color: "#94a3b8" }}>$</span>
                             <input
@@ -304,21 +320,21 @@ export default function MonthlyReconciliation() {
                               value={costs[p.id] || ""}
                               onChange={e => setCost(p.id, e.target.value)}
                               placeholder="填入"
-                              style={{ width: "100%", background: "#1e3a5f", border: "1px solid " + (costs[p.id] ? "#f59e0b" : "#2d5a8e"), borderRadius: 6, color: "#e2e8f0", padding: "4px 6px", fontSize: 13, fontFamily: ff, outline: "none" }}
+                              style={{ width: "100%", background: "#f8fafc", border: "1px solid " + (costs[p.id] ? "#f59e0b" : "#e2e8f0"), borderRadius: 6, color: "#1e293b", padding: "4px 6px", fontSize: 13, fontFamily: ff, outline: "none" }}
                             />
                           </div>
                         </div>
                         {/* 師傅工資 */}
                         <div>
-                          <div style={{ fontSize: 10, color: "#64748b", marginBottom: 3 }}>師傅工資</div>
-                          <div style={{ fontSize: 15, fontWeight: 600, color: "#8b5cf6" }}>
+                          <div style={{ fontSize: 10, color: "#94a3b8", marginBottom: 3 }}>師傅工資</div>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: "#8b5cf6" }}>
                             {wage > 0 ? fmt(wage) : <span style={{ color: "#475569", fontSize: 11 }}>未排程</span>}
                           </div>
                         </div>
                         {/* 毛利 */}
-                        <div style={{ background: costs[p.id] ? profitBg(gross) : "transparent", borderRadius: 8, padding: costs[p.id] ? "4px 8px" : 0, border: costs[p.id] ? "1px solid " + profitColor(gross) + "44" : "none" }}>
-                          <div style={{ fontSize: 10, color: "#64748b", marginBottom: 3 }}>毛利</div>
-                          <div style={{ fontSize: 15, fontWeight: 700, color: costs[p.id] ? profitColor(gross) : "#475569" }}>
+                        <div style={{ background: costs[p.id] ? (gross >= 0 ? "#f0fdf4" : "#fef2f2") : "#f8fafc", borderRadius: 8, padding: "4px 8px", border: "1px solid " + (costs[p.id] ? (gross >= 0 ? "#bbf7d0" : "#fecaca") : "#e2e8f0") }}>
+                          <div style={{ fontSize: 10, color: "#94a3b8", marginBottom: 3 }}>毛利</div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: costs[p.id] ? (gross >= 0 ? "#16a34a" : "#dc2626") : "#94a3b8" }}>
                             {costs[p.id] ? fmt(gross) : "—"}
                           </div>
                         </div>
@@ -329,7 +345,7 @@ export default function MonthlyReconciliation() {
                         value={notes[p.id] || ""}
                         onChange={e => setNote(p.id, e.target.value)}
                         placeholder="備註（可空白）"
-                        style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid #1e3a5f", color: "#64748b", padding: "4px 0", fontSize: 11, fontFamily: ff, outline: "none", boxSizing: "border-box" }}
+                        style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid #e2e8f0", color: "#94a3b8", padding: "4px 0", fontSize: 11, fontFamily: ff, outline: "none", boxSizing: "border-box" }}
                       />
                     </div>
                   </div>
@@ -339,23 +355,25 @@ export default function MonthlyReconciliation() {
 
             {/* 底部總計 */}
             {rows.length > 0 && (
-              <div style={{ marginTop: 20, background: "#0f1e3a", border: "1px solid #1e3a5f", borderRadius: 12, padding: "16px 20px" }}>
-                <div style={{ fontSize: 12, color: "#94a3b8", fontWeight: 600, marginBottom: 12, letterSpacing: "0.08em" }}>本月合計</div>
+              <div style={{ marginTop: 20, background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: "16px 20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+                <div style={{ fontSize: 12, color: "#64748b", fontWeight: 600, marginBottom: 12, letterSpacing: "0.08em" }}>本月合計</div>
                 {[
-                  { label: "總售價", val: totalRevenue, color: "#3b82f6" },
+                  { label: "含稅售價合計", val: totalRevenue, color: "#3b82f6" },
+                  { label: "稅額合計(5%)", val: totalTax, color: "#f59e0b" },
+                  { label: "未稅售價合計", val: totalRevenueExTax, color: "#0ea5e9" },
                   { label: "廠商成本合計", val: totalCost, color: "#f59e0b", note: totalCost === 0 ? "（尚未填入）" : "" },
                   { label: "師傅工資合計", val: totalWage, color: "#8b5cf6" },
                 ].map(({ label, val, color, note }) => (
-                  <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: "1px solid #1a2f4a", fontSize: 13 }}>
-                    <span style={{ color: "#94a3b8" }}>{label}{note && <span style={{ fontSize: 10, marginLeft: 6, color: "#475569" }}>{note}</span>}</span>
+                  <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: "1px solid #f1f5f9", fontSize: 13 }}>
+                    <span style={{ color: "#64748b" }}>{label}{note && <span style={{ fontSize: 10, marginLeft: 6, color: "#94a3b8" }}>{note}</span>}</span>
                     <span style={{ color, fontWeight: 600 }}>{fmt(val)}</span>
                   </div>
                 ))}
-                <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 12, fontSize: 18, fontWeight: 700 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 12, fontSize: 18, fontWeight: 700, color: "#1e293b" }}>
                   <span>本月毛利</span>
-                  <span style={{ color: profitColor(totalGross) }}>{fmt(totalGross)}</span>
+                  <span style={{ color: totalGross >= 0 ? "#16a34a" : "#dc2626" }}>{fmt(totalGross)}</span>
                 </div>
-                {totalCost === 0 && <div style={{ fontSize: 11, color: "#475569", marginTop: 6, textAlign: "right" }}>填入廠商成本後毛利才準確</div>}
+                {totalCost === 0 && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6, textAlign: "right" }}>填入廠商成本後毛利才準確</div>}
               </div>
             )}
           </>
